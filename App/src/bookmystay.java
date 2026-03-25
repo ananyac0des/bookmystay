@@ -1,126 +1,104 @@
 import java.util.*;
 
-// ===== Domain Model =====
+// ===== Reservation =====
 class Reservation {
-    private String reservationId;
-    private String guestName;
+    private String id;
+    private String guest;
     private String roomType;
 
-    public Reservation(String reservationId, String guestName, String roomType) {
-        this.reservationId = reservationId;
-        this.guestName = guestName;
+    public Reservation(String id, String guest, String roomType) {
+        this.id = id;
+        this.guest = guest;
         this.roomType = roomType;
     }
 
-    public String getReservationId() { return reservationId; }
-    public String getGuestName() { return guestName; }
+    public String getId() { return id; }
+    public String getGuest() { return guest; }
     public String getRoomType() { return roomType; }
-
-    public void display() {
-        System.out.println(reservationId + " | " + guestName + " | " + roomType);
-    }
 }
 
-// ===== Inventory =====
+// ===== Thread-Safe Inventory =====
 class RoomInventory {
     private Map<String, Integer> inventory = new HashMap<>();
 
     public RoomInventory() {
         inventory.put("Single Room", 2);
         inventory.put("Double Room", 1);
-        inventory.put("Suite Room", 1);
     }
 
-    public int getAvailability(String type) {
-        return inventory.getOrDefault(type, 0);
+    // Critical section
+    public synchronized boolean allocate(String type) {
+        int available = inventory.getOrDefault(type, 0);
+
+        if (available > 0) {
+            inventory.put(type, available - 1);
+            return true;
+        }
+        return false;
     }
 
-    public void decrement(String type) {
-        inventory.put(type, inventory.get(type) - 1);
+    public synchronized void display() {
+        System.out.println("\nFinal Inventory:");
+        for (Map.Entry<String, Integer> e : inventory.entrySet()) {
+            System.out.println(e.getKey() + " → " + e.getValue());
+        }
     }
 }
 
-// ===== Booking Queue =====
+// ===== Shared Booking Queue =====
 class BookingQueue {
     private Queue<Reservation> queue = new LinkedList<>();
 
-    public void add(Reservation r) { queue.offer(r); }
-    public Reservation next() { return queue.poll(); }
-    public boolean isEmpty() { return queue.isEmpty(); }
-}
-
-// ===== Booking History =====
-class BookingHistory {
-    private List<Reservation> history = new ArrayList<>();
-
-    public void addReservation(Reservation r) {
-        history.add(r); // maintains insertion order
+    public synchronized void add(Reservation r) {
+        queue.offer(r);
     }
 
-    public List<Reservation> getAll() {
-        return new ArrayList<>(history); // defensive copy
+    public synchronized Reservation getNext() {
+        return queue.poll();
     }
 }
 
-// ===== Booking Service =====
-class BookingService {
+// ===== Concurrent Booking Processor =====
+class BookingProcessor implements Runnable {
+
+    private BookingQueue queue;
     private RoomInventory inventory;
-    private Set<String> allocatedIds = new HashSet<>();
-    private BookingHistory history;
+    private Set<String> allocatedIds;
 
-    public BookingService(RoomInventory inventory, BookingHistory history) {
+    public BookingProcessor(BookingQueue queue,
+                            RoomInventory inventory,
+                            Set<String> allocatedIds) {
+        this.queue = queue;
         this.inventory = inventory;
-        this.history = history;
+        this.allocatedIds = allocatedIds;
     }
 
-    public void process(BookingQueue queue) {
+    @Override
+    public void run() {
+        while (true) {
 
-        while (!queue.isEmpty()) {
-            Reservation r = queue.next();
-            String type = r.getRoomType();
+            Reservation r;
 
-            if (inventory.getAvailability(type) > 0 &&
-                    !allocatedIds.contains(r.getReservationId())) {
-
-                allocatedIds.add(r.getReservationId());
-                inventory.decrement(type);
-
-                // store in history AFTER confirmation
-                history.addReservation(r);
-
-                System.out.println("Confirmed: " + r.getReservationId());
-            } else {
-                System.out.println("Failed: " + r.getReservationId());
+            // Critical section for queue
+            synchronized (queue) {
+                r = queue.getNext();
             }
-        }
-    }
-}
 
-// ===== Report Service =====
-class BookingReportService {
+            if (r == null) break;
 
-    // Display all bookings
-    public void showAllBookings(BookingHistory history) {
-        System.out.println("\n=== Booking History ===");
-        for (Reservation r : history.getAll()) {
-            r.display();
-        }
-    }
+            // Allocate safely
+            boolean success = inventory.allocate(r.getRoomType());
 
-    // Summary report
-    public void generateSummary(BookingHistory history) {
-        Map<String, Integer> countByType = new HashMap<>();
-
-        for (Reservation r : history.getAll()) {
-            countByType.put(
-                    r.getRoomType(),
-                    countByType.getOrDefault(r.getRoomType(), 0) + 1
-            );
-        }
-
-        System.out.println("\n=== Booking Summary ===");
-        for (Map.Entry<String, Integer> e : countByType.entrySet()) {
-            System.out.println(e.getKey() + " → " + e.getValue() + " bookings");
+            synchronized (allocatedIds) {
+                if (success) {
+                    allocatedIds.add(r.getId());
+                    System.out.println(Thread.currentThread().getName()
+                            + " CONFIRMED " + r.getId());
+                } else {
+                    System.out.println(Thread.currentThread().getName()
+                            + " FAILED " + r.getId());
+                }
+            }
         }
     }
 }
@@ -128,31 +106,36 @@ class BookingReportService {
 // ===== Main =====
 public class bookmystay {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
 
-        System.out.println("====== Book My Stay v8.0 ======\n");
+        System.out.println("====== Book My Stay v11.0 ======\n");
 
         RoomInventory inventory = new RoomInventory();
         BookingQueue queue = new BookingQueue();
-        BookingHistory history = new BookingHistory();
 
-        BookingService bookingService = new BookingService(inventory, history);
-        BookingReportService reportService = new BookingReportService();
+        // Shared set (must be synchronized)
+        Set<String> allocatedIds = Collections.synchronizedSet(new HashSet<>());
 
-        // Add booking requests
-        queue.add(new Reservation("R101", "Ananya", "Single Room"));
-        queue.add(new Reservation("R102", "Rahul", "Single Room"));
-        queue.add(new Reservation("R103", "Priya", "Single Room")); // will fail
+        // Simulate concurrent requests
+        queue.add(new Reservation("R1", "Ananya", "Single Room"));
+        queue.add(new Reservation("R2", "Rahul", "Single Room"));
+        queue.add(new Reservation("R3", "Priya", "Single Room"));
+        queue.add(new Reservation("R4", "Karan", "Double Room"));
 
-        // Process bookings
-        bookingService.process(queue);
+        // Create threads
+        Thread t1 = new Thread(new BookingProcessor(queue, inventory, allocatedIds), "Thread-1");
+        Thread t2 = new Thread(new BookingProcessor(queue, inventory, allocatedIds), "Thread-2");
 
-        // Admin views history
-        reportService.showAllBookings(history);
+        // Start threads
+        t1.start();
+        t2.start();
 
-        // Admin views summary
-        reportService.generateSummary(history);
+        // Wait for completion
+        t1.join();
+        t2.join();
 
-        System.out.println("\nReporting complete (read-only).");
+        inventory.display();
+
+        System.out.println("\nAllocated Reservations: " + allocatedIds);
     }
 }
