@@ -1,17 +1,6 @@
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Hotel Booking Management System
- *
- * Use Case 3: Centralized Room Inventory Management
- * Demonstrates use of HashMap for managing room availability.
- *
- * @author Ananya
- * @version 3.0
- */
-
-// Abstract Room class (same as UC2)
 abstract class Room {
     private int beds;
     private String size;
