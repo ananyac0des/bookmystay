@@ -124,20 +124,25 @@ public class bookmystay {
         Room doubleRoom = new DoubleRoom();
         Room suite = new SuiteRoom();
 
-        Map<String, Room> roomCatalog = new HashMap<>();
-        roomCatalog.put(single.getRoomType(), single);
-        roomCatalog.put(doubleRoom.getRoomType(), doubleRoom);
-        roomCatalog.put(suite.getRoomType(), suite);
-
-        // Initialize inventory (state)
+        // Inventory (centralized state)
         RoomInventory inventory = new RoomInventory();
 
-        // Initialize search service (read-only)
-        RoomSearchService searchService = new RoomSearchService(inventory, roomCatalog);
+        // Display room details + availability
+        System.out.println(single.getRoomType());
+        single.displayDetails();
+        System.out.println("Available: " + inventory.getAvailability(single.getRoomType()) + "\n");
 
-        // Guest performs search
-        searchService.searchAvailableRooms();
+        System.out.println(doubleRoom.getRoomType());
+        doubleRoom.displayDetails();
+        System.out.println("Available: " + inventory.getAvailability(doubleRoom.getRoomType()) + "\n");
 
-        System.out.println("Search completed. (No state modified)");
+        System.out.println(suite.getRoomType());
+        suite.displayDetails();
+        System.out.println("Available: " + inventory.getAvailability(suite.getRoomType()) + "\n");
+
+        // Display centralized inventory
+        inventory.displayInventory();
+
+        System.out.println("\nApplication finished.");
     }
 }
