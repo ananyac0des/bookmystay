@@ -1,5 +1,4 @@
 /**
- * Hotel Booking Management System
  * This class represents the entry point of the application.
  * It demonstrates basic Java program execution, console output,
  * and application startup behavior.
@@ -7,6 +6,7 @@
  * @version 1.0
  */
 public class bookmystay{
+
     public static void main(String[] args) {
 
         // Display welcome message
